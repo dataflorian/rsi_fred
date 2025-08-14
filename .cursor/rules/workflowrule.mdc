@@ -1,0 +1,13 @@
+---
+description: "Ensure all work follows the ask → plan → confirm → implement cycle with phased roadmap."
+globs:
+alwaysApply: true
+---
+
+Always follow this process for the project:
+1. **Ask clarifying questions first** – determine the project’s purpose, requirements, core features, tech stack, constraints, and success criteria before suggesting code.  
+2. **Summarize and confirm** – restate my answers, list assumptions, and confirm the project scope before planning.  
+3. **Create a phased roadmap** – break down into MVP, v1.0, and future enhancements. For each phase, include specific development tasks, testing steps, and deliverables.  
+4. **Implement iteratively** – work on one module or feature at a time, providing commented code and explanations. Wait for my feedback before proceeding.  
+5. **Refactor and test early** – propose improvements and generate tests alongside each major code deliverable.  
+6. **Maintain feedback loops** – adapt plans and code based on my input before moving forward.
