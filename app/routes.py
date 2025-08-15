@@ -2,6 +2,7 @@ from flask import Blueprint, render_template_string
 from app.services.binance_service import BinanceService
 from app.services.rsi_calculator import RSICalculator
 from app.services.data_updater import DataUpdater
+import os
 
 main_bp = Blueprint('main', __name__)
 
@@ -20,6 +21,52 @@ def index():
         <p><a href="/test-api">Test Binance API Connection</a></p>
         <p><a href="/test-rsi">Test RSI Calculations</a></p>
         <p><a href="/screener">🚀 Main RSI Screener</a></p>
+        <p><a href="/debug">🐛 Debug Configuration</a></p>
+    </body>
+    </html>
+    """
+    return html
+
+@main_bp.route('/debug')
+def debug():
+    """Debug route to check configuration and environment"""
+    html = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Debug Configuration</title>
+        <style>
+            body {{ font-family: Arial, sans-serif; margin: 20px; }}
+            .section {{ margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }}
+            .error {{ color: red; }}
+            .success {{ color: green; }}
+            .warning {{ color: orange; }}
+            pre {{ background: #f5f5f5; padding: 10px; border-radius: 3px; overflow-x: auto; }}
+        </style>
+    </head>
+    <body>
+        <h1>🐛 Debug Configuration</h1>
+        
+        <div class="section">
+            <h2>Environment Variables</h2>
+            <p><strong>FLASK_ENV:</strong> <span class="{'success' if os.environ.get('FLASK_ENV') == 'production' else 'warning'}">{os.environ.get('FLASK_ENV', 'NOT SET')}</span></p>
+            <p><strong>SECRET_KEY:</strong> <span class="{'success' if os.environ.get('SECRET_KEY') else 'error'}">{'SET' if os.environ.get('SECRET_KEY') else 'NOT SET'}</span></p>
+            <p><strong>RSI_PERIOD:</strong> {os.environ.get('RSI_PERIOD', '14 (default)')}</p>
+            <p><strong>TOP_COINS_LIMIT:</strong> {os.environ.get('TOP_COINS_LIMIT', '10 (default)')}</p>
+        </div>
+        
+        <div class="section">
+            <h2>Configuration Status</h2>
+            <p><strong>Debug Mode:</strong> <span class="{'warning' if os.environ.get('FLASK_ENV') == 'development' else 'success'}">{'ON' if os.environ.get('FLASK_ENV') == 'development' else 'OFF'}</span></p>
+            <p><strong>Production Mode:</strong> <span class="{'success' if os.environ.get('FLASK_ENV') == 'production' else 'warning'}">{'ON' if os.environ.get('FLASK_ENV') == 'production' else 'OFF'}</span></p>
+        </div>
+        
+        <div class="section">
+            <h2>All Environment Variables</h2>
+            <pre>{chr(10).join([f"{k}={v}" for k, v in sorted(os.environ.items())])}</pre>
+        </div>
+        
+        <p><a href="/">← Back to Home</a></p>
     </body>
     </html>
     """
@@ -27,30 +74,40 @@ def index():
 
 @main_bp.route('/test-api')
 def test_api():
-    """Test route to verify Binance API connection"""
+    """Test Binance API connection"""
     try:
         binance_service = BinanceService()
-        connection_status = binance_service.test_connection()
+        result = binance_service.test_connection()
         
-        if connection_status['status'] == 'connected':
+        if result['success']:
             html = f"""
             <!DOCTYPE html>
             <html>
             <head>
-                <title>API Test - RSI Crypto Screener</title>
+                <title>Binance API Test</title>
+                <style>
+                    body {{ font-family: Arial, sans-serif; margin: 20px; }}
+                    .success {{ color: green; }}
+                    .error {{ color: red; }}
+                    .info {{ color: blue; }}
+                    .section {{ margin: 15px 0; padding: 10px; border: 1px solid #ddd; border-radius: 5px; }}
+                </style>
             </head>
             <body>
                 <h1>Binance API Connection Test</h1>
-                <p style="color: green;">✅ {connection_status['message']}</p>
-                <h3>Sample Trading Pairs:</h3>
-                <ul>
-            """
-            
-            for pair in connection_status['sample_pairs']:
-                html += f"<li><strong>{pair['symbol']}</strong> ({pair['base']}/{pair['quote']})</li>"
-            
-            html += """
-                </ul>
+                <div class="section">
+                    <p class="success">✅ {result['message']}</p>
+                    <p><strong>Total Markets:</strong> {result['total_markets']}</p>
+                    <p><strong>USDT Pairs:</strong> {result['usdt_pairs']}</p>
+                </div>
+                
+                <div class="section">
+                    <h3>Sample Trading Pairs:</h3>
+                    <ul>
+                        {chr(10).join([f'<li>{pair}</li>' for pair in result['sample_pairs']])}
+                    </ul>
+                </div>
+                
                 <p><a href="/">← Back to Home</a></p>
             </body>
             </html>
@@ -60,11 +117,16 @@ def test_api():
             <!DOCTYPE html>
             <html>
             <head>
-                <title>API Test - RSI Crypto Screener</title>
+                <title>Binance API Test</title>
+                <style>
+                    body {{ font-family: Arial, sans-serif; margin: 20px; }}
+                    .error {{ color: red; }}
+                </style>
             </head>
             <body>
                 <h1>Binance API Connection Test</h1>
-                <p style="color: red;">❌ {connection_status['message']}</p>
+                <p class="error">❌ {result['message']}</p>
+                <p><strong>Error Details:</strong> {result.get('error', 'Unknown error')}</p>
                 <p><a href="/">← Back to Home</a></p>
             </body>
             </html>
@@ -77,11 +139,15 @@ def test_api():
         <!DOCTYPE html>
         <html>
         <head>
-            <title>API Test - RSI Crypto Screener</title>
+            <title>Binance API Test</title>
+            <style>
+                body {{ font-family: Arial, sans-serif; margin: 20px; }}
+                .error {{ color: red; }}
+            </style>
         </head>
         <body>
             <h1>Binance API Connection Test</h1>
-            <p style="color: red;">❌ Service initialization failed: {str(e)}</p>
+            <p class="error">❌ Failed to initialize Binance service: {str(e)}</p>
             <p><a href="/">← Back to Home</a></p>
         </body>
         </html>
