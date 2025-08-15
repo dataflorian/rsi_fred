@@ -20,9 +20,8 @@ class BinanceWebSocketService:
         self.reconnect_attempts = 0
         self.max_reconnect_attempts = 5
         
-        # WebSocket URLs
+        # WebSocket URLs - Use the correct Binance WebSocket endpoint
         self.ws_url = "wss://stream.binance.com:9443/ws"
-        self.test_url = "wss://testnet.binance.vision/ws"
         
         # Rate limiting (WebSocket is much more generous)
         self.max_subscriptions = 200  # Binance allows up to 200 streams
@@ -61,12 +60,14 @@ class BinanceWebSocketService:
             # Format symbols for WebSocket (lowercase, no separator)
             ws_symbols = [symbol.lower().replace('/', '') for symbol in symbols]
             
-            # Create subscription message
+            # Create subscription message - Use the correct format
             subscription = {
                 "method": "SUBSCRIBE",
                 "params": [f"{symbol}@ticker" for symbol in ws_symbols],
                 "id": int(time.time() * 1000)
             }
+            
+            logger.info(f"Sending subscription: {json.dumps(subscription)}")
             
             # Send subscription
             self.ws.send(json.dumps(subscription))
@@ -135,6 +136,17 @@ class BinanceWebSocketService:
     def _process_message(self, data: Dict):
         """Process incoming WebSocket messages"""
         try:
+            # Handle subscription confirmation messages
+            if 'result' in data and 'id' in data:
+                logger.info(f"Subscription confirmed: {data}")
+                return
+            
+            # Handle error messages
+            if 'error' in data:
+                logger.error(f"WebSocket error: {data}")
+                return
+            
+            # Handle actual data messages
             if 'stream' in data:
                 stream_data = data['data']
                 stream_type = data['stream']
@@ -143,53 +155,67 @@ class BinanceWebSocketService:
                     self._process_ticker_data(stream_data)
                 elif 'kline' in stream_type:
                     self._process_kline_data(stream_data)
+            else:
+                # Direct data (for some message types)
+                if 's' in data and 'c' in data:  # Ticker data
+                    self._process_ticker_data(data)
+                elif 's' in data and 'k' in data:  # Kline data
+                    self._process_kline_data(data)
                     
         except Exception as e:
             logger.error(f"Error processing message: {e}")
     
     def _process_ticker_data(self, data: Dict):
         """Process ticker data and update cache"""
-        symbol = data['s']
-        ticker_info = {
-            'symbol': symbol,
-            'price': float(data['c']),
-            'volume': float(data['v']),
-            'price_change': float(data['P']),
-            'volume_quote': float(data['q']),
-            'timestamp': data['E']
-        }
-        
-        self.data_cache[symbol] = ticker_info
-        logger.debug(f"Updated ticker for {symbol}: ${ticker_info['price']}")
+        try:
+            symbol = data['s']
+            ticker_info = {
+                'symbol': symbol,
+                'price': float(data['c']),
+                'volume': float(data['v']),
+                'price_change': float(data['P']),
+                'volume_quote': float(data['q']),
+                'timestamp': data['E']
+            }
+            
+            self.data_cache[symbol] = ticker_info
+            logger.info(f"Updated ticker for {symbol}: ${ticker_info['price']}")
+            
+        except Exception as e:
+            logger.error(f"Error processing ticker data: {e}")
     
     def _process_kline_data(self, data: Dict):
         """Process kline data for technical analysis"""
-        symbol = data['s']
-        kline = data['k']
-        
-        kline_data = {
-            'symbol': symbol,
-            'open': float(kline['o']),
-            'high': float(kline['h']),
-            'low': float(kline['l']),
-            'close': float(kline['c']),
-            'volume': float(kline['v']),
-            'timestamp': kline['t'],
-            'interval': kline['i']
-        }
-        
-        # Store in cache with symbol_klines key
-        cache_key = f"{symbol}_klines"
-        if cache_key not in self.data_cache:
-            self.data_cache[cache_key] = []
-        
-        self.data_cache[cache_key].append(kline_data)
-        
-        # Keep only last 100 klines for RSI calculation
-        if len(self.data_cache[cache_key]) > 100:
-            self.data_cache[cache_key] = self.data_cache[cache_key][-100:]
-        
-        logger.debug(f"Updated klines for {symbol}: {len(self.data_cache[cache_key])} candles")
+        try:
+            symbol = data['s']
+            kline = data['k']
+            
+            kline_data = {
+                'symbol': symbol,
+                'open': float(kline['o']),
+                'high': float(kline['h']),
+                'low': float(kline['l']),
+                'close': float(kline['c']),
+                'volume': float(kline['v']),
+                'timestamp': kline['t'],
+                'interval': kline['i']
+            }
+            
+            # Store in cache with symbol_klines key
+            cache_key = f"{symbol}_klines"
+            if cache_key not in self.data_cache:
+                self.data_cache[cache_key] = []
+            
+            self.data_cache[cache_key].append(kline_data)
+            
+            # Keep only last 100 klines for RSI calculation
+            if len(self.data_cache[cache_key]) > 100:
+                self.data_cache[cache_key] = self.data_cache[cache_key][-100:]
+            
+            logger.info(f"Updated klines for {symbol}: {len(self.data_cache[cache_key])} candles")
+            
+        except Exception as e:
+            logger.error(f"Error processing kline data: {e}")
     
     def _reconnect(self):
         """Attempt to reconnect to WebSocket"""
@@ -252,29 +278,37 @@ class BinanceWebSocketService:
             # Test basic subscription
             test_symbols = ['BTCUSDT', 'ETHUSDT']
             if self.subscribe_to_ticker(test_symbols):
-                # Wait a moment for data
-                time.sleep(2)
+                # Start listening for messages
+                self.start_listening()
                 
-                # Check if we received data
-                btc_data = self.get_ticker_data('BTCUSDT')
-                eth_data = self.get_ticker_data('ETHUSDT')
+                # Wait for data with timeout
+                timeout = 10  # seconds
+                start_time = time.time()
                 
-                if btc_data and eth_data:
-                    return {
-                        'success': True,
-                        'message': 'WebSocket connected and receiving data successfully',
-                        'total_streams': len(self.data_cache),
-                        'sample_data': {
-                            'BTC/USDT': f"${btc_data['price']:.2f}",
-                            'ETH/USDT': f"${eth_data['price']:.2f}"
+                while time.time() - start_time < timeout:
+                    # Check if we received data
+                    btc_data = self.get_ticker_data('BTCUSDT')
+                    eth_data = self.get_ticker_data('ETHUSDT')
+                    
+                    if btc_data and eth_data:
+                        return {
+                            'success': True,
+                            'message': 'WebSocket connected and receiving data successfully',
+                            'total_streams': len(self.data_cache),
+                            'sample_data': {
+                                'BTC/USDT': f"${btc_data['price']:.2f}",
+                                'ETH/USDT': f"${eth_data['price']:.2f}"
+                            }
                         }
-                    }
-                else:
-                    return {
-                        'success': False,
-                        'message': 'Connected but no data received',
-                        'error': 'Subscription or data processing issue'
-                    }
+                    
+                    time.sleep(0.5)  # Check every 500ms
+                
+                # Timeout reached
+                return {
+                    'success': False,
+                    'message': 'Connected but no data received within timeout',
+                    'error': 'Data reception timeout - check subscription format'
+                }
             else:
                 return {
                     'success': False,
