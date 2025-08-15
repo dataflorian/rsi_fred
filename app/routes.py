@@ -275,20 +275,107 @@ def test_rsi():
 def screener():
     """Main RSI screener showing top 10 performing coins"""
     try:
-        data_updater = DataUpdater(rsi_period=14, top_coins_limit=10)
-        top_coins = data_updater.get_top_performing_coins()
-        stats = data_updater.get_screening_stats()
+        print("DEBUG: Starting screener route")  # Debug log
         
-        if not top_coins:
-            return """
+        # Test Binance connection first
+        try:
+            binance_service = BinanceService()
+            print("DEBUG: Binance service created successfully")  # Debug log
+            
+            # Test basic connection
+            connection_test = binance_service.test_connection()
+            print(f"DEBUG: Connection test result: {connection_test}")  # Debug log
+            
+            if not connection_test['success']:
+                return f"""
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <title>RSI Screener - RSI Crypto Screener</title>
+                    <style>
+                        body {{ font-family: Arial, sans-serif; margin: 20px; }}
+                        .error {{ color: red; }}
+                        .debug {{ background: #f5f5f5; padding: 10px; margin: 10px 0; border-radius: 5px; }}
+                    </style>
+                </head>
+                <body>
+                    <h1>🚀 RSI Crypto Screener</h1>
+                    <p class="error">❌ Binance API Connection Failed</p>
+                    <p><strong>Error:</strong> {connection_test.get('error', 'Unknown error')}</p>
+                    
+                    <div class="debug">
+                        <h3>Debug Information:</h3>
+                        <p><strong>Connection Status:</strong> {connection_test.get('message', 'No message')}</p>
+                        <p><strong>Total Markets:</strong> {connection_test.get('total_markets', 'N/A')}</p>
+                        <p><strong>USDT Pairs:</strong> {connection_test.get('usdt_pairs', 'N/A')}</p>
+                    </div>
+                    
+                    <p><a href="/test-api">🔧 Test API Connection</a></p>
+                    <p><a href="/debug">🐛 Debug Configuration</a></p>
+                    <p><a href="/">← Back to Home</a></p>
+                </body>
+                </html>
+                """
+            
+        except Exception as e:
+            print(f"DEBUG: Binance service creation failed: {e}")  # Debug log
+            return f"""
             <!DOCTYPE html>
             <html>
             <head>
                 <title>RSI Screener - RSI Crypto Screener</title>
+                <style>
+                    body {{ font-family: Arial, sans-serif; margin: 20px; }}
+                    .error {{ color: red; }}
+                </style>
             </head>
             <body>
-                <h1>RSI Crypto Screener</h1>
-                <p style="color: orange;">⏳ No data available yet. Please wait for initial analysis...</p>
+                <h1>🚀 RSI Crypto Screener</h1>
+                <p class="error">❌ Failed to create Binance service</p>
+                <p><strong>Error:</strong> {str(e)}</p>
+                <p><a href="/debug">🐛 Debug Configuration</a></p>
+                <p><a href="/">← Back to Home</a></p>
+            </body>
+            </html>
+            """
+        
+        print("DEBUG: Creating DataUpdater")  # Debug log
+        data_updater = DataUpdater(rsi_period=14, top_coins_limit=10)
+        
+        print("DEBUG: Getting top performing coins")  # Debug log
+        top_coins = data_updater.get_top_performing_coins()
+        print(f"DEBUG: Got {len(top_coins) if top_coins else 0} coins")  # Debug log
+        
+        stats = data_updater.get_screening_stats()
+        print(f"DEBUG: Got stats: {stats}")  # Debug log
+        
+        if not top_coins:
+            return f"""
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>RSI Screener - RSI Crypto Screener</title>
+                <style>
+                    body {{ font-family: Arial, sans-serif; margin: 20px; }}
+                    .warning {{ color: orange; }}
+                    .debug {{ background: #f5f5f5; padding: 10px; margin: 10px 0; border-radius: 5px; }}
+                </style>
+            </head>
+            <body>
+                <h1>🚀 RSI Crypto Screener</h1>
+                <p class="warning">⏳ No data available yet. Please wait for initial analysis...</p>
+                
+                <div class="debug">
+                    <h3>Debug Information:</h3>
+                    <p><strong>DataUpdater Created:</strong> ✅ Yes</p>
+                    <p><strong>Top Coins Result:</strong> {len(top_coins) if top_coins else 0} coins</p>
+                    <p><strong>Stats Available:</strong> {'Yes' if stats else 'No'}</p>
+                    <p><strong>Last Update:</strong> {stats.get('last_update', 'Never') if stats else 'N/A'}</p>
+                </div>
+                
+                <p><a href="/test-api">🔧 Test API Connection</a></p>
+                <p><a href="/test-rsi">🧮 Test RSI Calculations</a></p>
+                <p><a href="/debug">🐛 Debug Configuration</a></p>
                 <p><a href="/">← Back to Home</a></p>
             </body>
             </html>
