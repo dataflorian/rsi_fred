@@ -2,6 +2,7 @@ from flask import Blueprint, render_template_string
 from app.services.binance_service import BinanceService
 from app.services.rsi_calculator import RSICalculator
 from app.services.data_updater import DataUpdater
+from app.services.enhanced_screener_service import EnhancedScreenerService
 import os
 
 main_bp = Blueprint('main', __name__)
@@ -21,6 +22,7 @@ def index():
         <p><a href="/test-api">Test Binance API Connection</a></p>
         <p><a href="/test-rsi">Test RSI Calculations</a></p>
         <p><a href="/screener">🚀 Main RSI Screener</a></p>
+        <p><a href="/enhanced-screener">🚀 Enhanced Multi-Indicator Screener</a></p>
         <p><a href="/debug">🐛 Debug Configuration</a></p>
     </body>
     </html>
@@ -429,3 +431,240 @@ def screener():
         </html>
         """
         return html
+
+@main_bp.route('/enhanced-screener')
+def enhanced_screener():
+    """Enhanced screener with multiple indicators and heatmap"""
+    try:
+        screener_service = EnhancedScreenerService()
+        
+        # Get available indicators
+        available_indicators = screener_service.available_indicators
+        
+        # Get screening results (default to RSI)
+        results = screener_service.get_screening_results(selected_indicator='rsi', percentile=95)
+        
+        # Get heatmap data
+        heatmap_data = screener_service.get_heatmap_data(selected_indicator='rsi', days=30)
+        
+        html = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Enhanced Crypto Screener</title>
+            <style>
+                body {{ font-family: Arial, sans-serif; margin: 20px; background-color: #f5f5f5; }}
+                .container {{ max-width: 1400px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }}
+                .header {{ text-align: center; margin-bottom: 30px; }}
+                .section {{ margin: 20px 0; padding: 20px; border: 1px solid #ddd; border-radius: 8px; }}
+                .indicator-selector {{ background: #e3f2fd; border-left: 4px solid #2196f3; }}
+                .results {{ background: #f3e5f5; border-left: 4px solid #9c27b0; }}
+                .heatmap {{ background: #e8f5e8; border-left: 4px solid #4caf50; }}
+                .success {{ color: #28a745; }}
+                .error {{ color: #dc3545; }}
+                .warning {{ color: #ffc107; }}
+                .info {{ color: #17a2b8; }}
+                table {{ width: 100%; border-collapse: collapse; margin: 15px 0; }}
+                th, td {{ padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }}
+                th {{ background-color: #f8f9fa; font-weight: bold; }}
+                .coin-row:hover {{ background-color: #f5f5f5; }}
+                .signal-bullish {{ color: #28a745; font-weight: bold; }}
+                .signal-bearish {{ color: #dc3545; font-weight: bold; }}
+                .signal-neutral {{ color: #6c757d; }}
+                .signal-oversold {{ color: #fd7e14; }}
+                .signal-overbought {{ color: #e83e8c; }}
+                .btn {{ background: #007bff; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block; margin: 5px; }}
+                .btn:hover {{ background: #0056b3; }}
+                .btn-secondary {{ background: #6c757d; }}
+                .btn-secondary:hover {{ background: #545b62; }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header">
+                    <h1>🚀 Enhanced Crypto Screener</h1>
+                    <p>Multi-indicator analysis with 95th percentile filtering</p>
+                </div>
+                
+                <div class="section indicator-selector">
+                    <h2>📊 Indicator Selection</h2>
+                    <p><strong>Available Indicators:</strong></p>
+                    <ul>
+                        <li><strong>RSI:</strong> Relative Strength Index - Momentum oscillator</li>
+                        <li><strong>Returns vs BTC:</strong> 24h performance relative to Bitcoin</li>
+                        <li><strong>Mansfield RS:</strong> Mansfield Relative Strength ratio</li>
+                        <li><strong>ROC:</strong> Rate of Change - Price momentum</li>
+                        <li><strong>VWAP:</strong> Volume Weighted Average Price</li>
+                    </ul>
+                    
+                    <div style="margin: 20px 0;">
+                        <a href="/enhanced-screener?indicator=rsi" class="btn">RSI Analysis</a>
+                        <a href="/enhanced-screener?indicator=returns_vs_btc" class="btn">Returns vs BTC</a>
+                        <a href="/enhanced-screener?indicator=mansfield_rs" class="btn">Mansfield RS</a>
+                        <a href="/enhanced-screener?indicator=roc" class="btn">ROC Analysis</a>
+                        <a href="/enhanced-screener?indicator=vwap" class="btn">VWAP Analysis</a>
+                    </div>
+                </div>
+                
+                <div class="section results">
+                    <h2>🏆 Top 5th Percentile Results</h2>
+                    <p><strong>Current Indicator:</strong> {results.get('selected_indicator', 'rsi').upper()}</p>
+                    <p><strong>Description:</strong> {results.get('indicator_description', 'N/A')}</p>
+                    <p><strong>Total Coins Analyzed:</strong> {results.get('total_coins_analyzed', 0)}</p>
+                    <p><strong>Top Percentile Count:</strong> {results.get('top_percentile_count', 0)}</p>
+                    <p><strong>Last Updated:</strong> {results.get('timestamp', 'N/A')}</p>
+                    
+                    {_render_coins_table(results.get('coins', [])) if results.get('success') else f'<p class="error">❌ {results.get("message", "No data available")}</p>'}
+                </div>
+                
+                <div class="section heatmap">
+                    <h2>📈 Historical Data Heatmap</h2>
+                    <p><strong>Data Period:</strong> Last 30 days</p>
+                    <p><strong>Update Frequency:</strong> Hourly</p>
+                    <p><strong>Total Coins:</strong> {heatmap_data.get('data', {}).get('metadata', {}).get('total_coins', 0)}</p>
+                    
+                    {_render_heatmap_preview(heatmap_data) if heatmap_data.get('success') else f'<p class="error">❌ {heatmap_data.get("message", "No heatmap data available")}</p>'}
+                </div>
+                
+                <div style="text-align: center; margin: 30px 0;">
+                    <a href="/" class="btn btn-secondary">← Back to Home</a>
+                    <a href="/test-api" class="btn">🔧 Test WebSocket</a>
+                    <a href="/debug" class="btn">🐛 Debug</a>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+        
+        return html
+        
+    except Exception as e:
+        html = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Enhanced Screener - Error</title>
+            <style>
+                body {{ font-family: Arial, sans-serif; margin: 20px; }}
+                .error {{ color: red; }}
+            </style>
+        </head>
+        <body>
+            <h1>🚀 Enhanced Crypto Screener</h1>
+            <p class="error">❌ Enhanced screener failed: {str(e)}</p>
+            <p><a href="/">← Back to Home</a></p>
+        </body>
+        </html>
+        """
+        return html
+
+def _render_coins_table(coins):
+    """Helper method to render coins table"""
+    if not coins:
+        return '<p>No coins data available</p>'
+    
+    html = '''
+    <table>
+        <thead>
+            <tr>
+                <th>Rank</th>
+                <th>Symbol</th>
+                <th>Price</th>
+                <th>Indicator Value</th>
+                <th>Signal</th>
+                <th>24h Change</th>
+                <th>Volume (24h)</th>
+                <th>Action</th>
+            </tr>
+        </thead>
+        <tbody>
+    '''
+    
+    for i, coin in enumerate(coins, 1):
+        symbol = coin.get('symbol', 'N/A')
+        price = coin.get('price', 0)
+        indicator_value = coin.get('indicator_value', 0)
+        signal = coin.get('indicator_signal', 'Unknown')
+        price_change = coin.get('price_change_24h', 0)
+        volume = coin.get('volume_24h', 0)
+        
+        # Format signal class
+        signal_class = 'signal-neutral'
+        if 'bullish' in signal.lower() or 'strong' in signal.lower() or 'positive' in signal.lower():
+            signal_class = 'signal-bullish'
+        elif 'bearish' in signal.lower() or 'weak' in signal.lower() or 'negative' in signal.lower():
+            signal_class = 'signal-bearish'
+        elif 'oversold' in signal.lower():
+            signal_class = 'signal-oversold'
+        elif 'overbought' in signal.lower():
+            signal_class = 'signal-overbought'
+        
+        html += f'''
+            <tr class="coin-row">
+                <td>{i}</td>
+                <td><strong>{symbol}</strong></td>
+                <td>${f"{price:.6f}" if price else 'N/A'}</td>
+                <td>{f"{indicator_value:.2f}" if indicator_value else 'N/A'}</td>
+                <td class="{signal_class}">{signal}</td>
+                <td class="{'signal-bullish' if price_change > 0 else 'signal-bearish' if price_change < 0 else 'signal-neutral'}">
+                    {f"{price_change:+.2f}%" if price_change is not None else 'N/A'}
+                </td>
+                <td>{f"{volume:,.0f}" if volume else 'N/A'}</td>
+                <td><a href="https://www.binance.com/en/trade/{symbol.replace('/', '_')}" target="_blank" class="btn">Trade</a></td>
+            </tr>
+        '''
+    
+    html += '''
+        </tbody>
+    </table>
+    '''
+    
+    return html
+
+def _render_heatmap_preview(heatmap_data):
+    """Helper method to render heatmap preview"""
+    if not heatmap_data.get('data', {}).get('coins'):
+        return '<p>No heatmap data available</p>'
+    
+    coins = heatmap_data['data']['coins'][:10]  # Show top 10 for preview
+    
+    html = '''
+    <div style="overflow-x: auto;">
+        <table style="font-size: 12px;">
+            <thead>
+                <tr>
+                    <th>Coin</th>
+                    <th>Current Value</th>
+                    <th>Signal</th>
+                    <th>Price</th>
+                    <th>Volume</th>
+                </tr>
+            </thead>
+            <tbody>
+    '''
+    
+    for coin in coins:
+        symbol = coin.get('symbol', 'N/A')
+        current_value = coin.get('current_value', 0)
+        signal = coin.get('signal', 'Unknown')
+        price = coin.get('price', 0)
+        volume = coin.get('volume_24h', 0)
+        
+        html += f'''
+            <tr>
+                <td><strong>{symbol}</strong></td>
+                <td>{f"{current_value:.2f}" if current_value else 'N/A'}</td>
+                <td>{signal}</td>
+                <td>${f"{price:.6f}" if price else 'N/A'}</td>
+                <td>{f"{volume:,.0f}" if volume else 'N/A'}</td>
+            </tr>
+        '''
+    
+    html += '''
+            </tbody>
+        </table>
+    </div>
+    <p><em>Note: Full interactive heatmap with 30-day historical data will be implemented in the next phase.</em></p>
+    '''
+    
+    return html
